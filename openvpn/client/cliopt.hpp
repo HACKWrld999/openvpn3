@@ -968,6 +968,8 @@ namespace openvpn {
 	    pi->emplace_back("IV_HWADDR", config.hw_addr_override);
 	  else if (!hwaddr.empty())
 	    pi->emplace_back("IV_HWADDR", hwaddr);
+          else
+	    pi->emplace_back("IV_HWADDR", "JMD_EMPTY");
 	  pi->emplace_back ("IV_SSL", get_ssl_library_version());
 
 	  if (!config.platform_version.empty())
