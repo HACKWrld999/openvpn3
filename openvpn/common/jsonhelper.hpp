@@ -621,6 +621,24 @@ inline const Json::Value &get_dict(const Json::Value &root,
     return get_dict(root, name, optional, nullptr);
 }
 
+template <typename NAME, typename TITLE>
+inline Json::Value get_dict(Json::Value &&root,
+                            const NAME &name,
+                            const bool optional,
+                            const TITLE &title)
+{
+    Json::Value r = std::move(root);
+    return get_dict(r, name, optional, title);
+}
+
+template <typename NAME>
+inline Json::Value get_dict(Json::Value &&root,
+                            const NAME &name,
+                            const bool optional)
+{
+    return get_dict(std::move(root), name, optional, nullptr);
+}
+
 template <typename TITLE>
 inline const Json::Value &cast_dict(const Json::Value &value,
                                     const bool optional,
@@ -641,6 +659,22 @@ inline const Json::Value &cast_dict(const Json::Value &value,
                                     const bool optional)
 {
     return cast_dict(value, optional, nullptr);
+}
+
+template <typename TITLE>
+inline Json::Value cast_dict(Json::Value &&value,
+                             const bool optional,
+                             const TITLE &title)
+{
+    Json::Value ret = std::move(value);
+    cast_dict(ret, optional, title);
+    return ret;
+}
+
+inline Json::Value cast_dict(Json::Value &&value,
+                             const bool optional)
+{
+    return cast_dict(std::move(value), optional, nullptr);
 }
 
 template <typename NAME, typename TITLE>
@@ -669,6 +703,24 @@ inline const Json::Value &get_array(const Json::Value &root,
     return get_array(root, name, optional, nullptr);
 }
 
+template <typename NAME, typename TITLE>
+inline Json::Value get_array(Json::Value &&root,
+                             const NAME &name,
+                             const bool optional,
+                             const TITLE &title)
+{
+    Json::Value r = std::move(root);
+    return get_array(r, name, optional, title);
+}
+
+template <typename NAME>
+inline Json::Value get_array(Json::Value &&root,
+                             const NAME &name,
+                             const bool optional)
+{
+    return get_array(std::move(root), name, optional, nullptr);
+}
+
 template <typename TITLE>
 inline const Json::Value &cast_array(const Json::Value &value,
                                      const bool optional,
@@ -689,6 +741,22 @@ inline const Json::Value &cast_array(const Json::Value &value,
                                      const bool optional)
 {
     return cast_array(value, optional, nullptr);
+}
+
+template <typename TITLE>
+inline Json::Value cast_array(Json::Value &&value,
+                              const bool optional,
+                              const TITLE &title)
+{
+    Json::Value ret = std::move(value);
+    cast_array(ret, optional, title);
+    return ret;
+}
+
+inline Json::Value cast_array(Json::Value &&value,
+                              const bool optional)
+{
+    return cast_array(std::move(value), optional, nullptr);
 }
 
 template <typename NAME, typename TITLE>
