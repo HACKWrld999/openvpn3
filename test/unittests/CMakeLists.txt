@@ -43,6 +43,7 @@ add_executable(coreUnitTests
         test_hostport.cpp
         test_ip.cpp
         test_ostream_containers.cpp
+        test_scoped_acq.cpp
         test_parseargv.cpp
         test_path.cpp
         test_pktid.cpp
