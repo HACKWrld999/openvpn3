@@ -1,0 +1,143 @@
+Note: These are the changes made to the proto.cpp that was copied to
+this directory as test_proto.hpp
+
+--- test/ssl/proto.cpp	2023-05-11 11:08:52.371117557 -0700
++++ test/unittests/test_proto.cpp	2023-05-16 12:51:28.961717371 -0700
+@@ -4,7 +4,7 @@
+ //               packet encryption, packet authentication, and
+ //               packet compression.
+ //
+-//    Copyright (C) 2012-2022 OpenVPN Inc.
++//    Copyright (C) 2012-2023 OpenVPN Inc.
+ //
+ //    This program is free software: you can redistribute it and/or modify
+ //    it under the terms of the GNU Affero General Public License Version 3
+@@ -21,6 +21,35 @@
+ 
+ // Unit test for OpenVPN Protocol implementation (class ProtoContext)
+ 
++//#include "test_common.h"  // commented as it adds a competing logging dependency
++#include <gtest/gtest.h> // added since test_common.h which included it was removed
++
++// compile command for ssl/proto.cpp
++// -DASIO_STANDALONE -DBUILD_VERSION=devbuild -DHAVE_LZ4 -DITER=1000000 -DMBEDTLS_DEPRECATED_REMOVED -DN_THREADS=1 -DRENEG=900 -DSITER=1 -DUSE_ASIO -DUSE_OPENSSL
++
++// compile command for coreUnitTests.dir/test_proto.cpp.o
++// -DASIO_STANDALONE -DBUILD_VERSION=devbuild -DHAVE_JSONCPP -DHAVE_LZ4 -DHAVE_XXHASH -DMBEDTLS_DEPRECATED_REMOVED -DOPENVPN_FORCE_TUN_NULL -DOPENVPN_RC_NOTIFY
++
++// This file was started by making a copy of test/ssl/proto.cpp in this repository.  In
++// it's directory, a CMakeList.txt file customizes its compile line, adding CMake
++// variables that can be adjusted with the various CMake UIs.  These variables create
++// the following definitions injected via the compile command:
++#define ITER 1000000
++#define N_THREADS 1
++#define RENEG 900
++#define SITER 1
++// potentially, the above flags can be converted to variables and modified within the
++// different TEST() functions that replace main() in the original file
++
++// Also, the CMakeLists.txt file that governs the coreUnitTests executable built from
++// sources in this directory adds defines not specified in test/ssl.  So far, there
++// appears to be no reason to #undef them.  They are as follows:
++// HAVE_JSONCPP
++// HAVE_XXHASH
++// OPENVPN_FORCE_TUN_NULL
++// OPENVPN_RC_NOTIFY
++
++
+ #include <iostream>
+ #include <string>
+ #include <sstream>
+@@ -30,6 +59,13 @@
+ #include <limits>
+ #include <thread>
+ 
++#define PROTO_UNIT_TEST
++#define ProtoContext ProtoContext_ut
++#define CompressStub CompressStub_ut
++#define CompressLZOAsym CompressLZOAsym_ut
++// #define Compress Compress_ut
++#define OPENVPN_DEBUG_COMPRESS 0    // debug level for compression objects (0)
++
+ #include <openvpn/common/platform.hpp>
+ 
+ #ifdef OPENVPN_PLATFORM_WIN
+@@ -591,7 +627,9 @@
+     size_t n_control_send_ = 0;
+     size_t n_control_recv_ = 0;
+     BufferPtr templ;
++#if !FEEDBACK
+     size_t iteration = 0;
++#endif
+     char progress_[11];
+     bool disable_xmit_ = false;
+ };
+@@ -663,6 +701,7 @@
+           drop_prob(drop_prob_arg),
+           corrupt_prob(corrupt_prob_arg)
+     {
++        now->raw();
+     }
+ 
+     template <typename T1, typename T2>
+@@ -885,15 +924,15 @@
+         const Time::Duration time_step = Time::Duration::binary_ms(100);
+ 
+         // client config files
+-        const std::string ca_crt = read_text("ca.crt");
+-        const std::string client_crt = read_text("client.crt");
+-        const std::string client_key = read_text("client.key");
+-        const std::string server_crt = read_text("server.crt");
+-        const std::string server_key = read_text("server.key");
+-        const std::string dh_pem = read_text("dh.pem");
+-        const std::string tls_auth_key = read_text("tls-auth.key");
+-        const std::string tls_crypt_v2_server_key = read_text("tls-crypt-v2-server.key");
+-        const std::string tls_crypt_v2_client_key = read_text("tls-crypt-v2-client.key");
++        const std::string ca_crt = read_text(UNITTEST_SOURCE_DIR "../ssl/ca.crt");
++        const std::string client_crt = read_text(UNITTEST_SOURCE_DIR "../ssl/client.crt");
++        const std::string client_key = read_text(UNITTEST_SOURCE_DIR "../ssl/client.key");
++        const std::string server_crt = read_text(UNITTEST_SOURCE_DIR "../ssl/server.crt");
++        const std::string server_key = read_text(UNITTEST_SOURCE_DIR "../ssl/server.key");
++        const std::string dh_pem = read_text(UNITTEST_SOURCE_DIR "../ssl/dh.pem");
++        const std::string tls_auth_key = read_text(UNITTEST_SOURCE_DIR "../ssl/tls-auth.key");
++        const std::string tls_crypt_v2_server_key = read_text(UNITTEST_SOURCE_DIR "../ssl/tls-crypt-v2-server.key");
++        const std::string tls_crypt_v2_client_key = read_text(UNITTEST_SOURCE_DIR "../ssl/tls-crypt-v2-client.key");
+ 
+         // client config
+         ClientSSLAPI::Config::Ptr cc(new ClientSSLAPI::Config());
+@@ -1182,25 +1221,17 @@
+     return ret;
+ }
+ 
+-int main(int argc, char *argv[])
++TEST(proto, base_1_thread)
+ {
+     int ret = 0;
+-    // process-wide initialization
+-    InitProcess::Init init;
+ 
+     // set global MbedTLS debug level
+ #if defined(USE_MBEDTLS)
+     mbedtls_debug_set_threshold(1);
+ #endif
+ 
+-    if (argc >= 2 && !strcmp(argv[1], "test"))
+-    {
+-        const std::string out = SelfTest::crypto_self_test();
+-        OPENVPN_LOG(out);
+-        goto out;
+-    }
+-
+ #if N_THREADS >= 2
++    // probably ought to set ret in this compile path too
+     std::thread *threads[N_THREADS];
+     int i;
+     for (i = 0; i < N_THREADS; ++i)
+@@ -1217,6 +1248,5 @@
+     ret = test_retry(1);
+ #endif
+ 
+-out:
+-    return ret;
++    EXPECT_EQ(ret, 0);
+ }

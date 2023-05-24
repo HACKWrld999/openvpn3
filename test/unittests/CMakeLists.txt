@@ -97,12 +97,15 @@ if (UNIX)
 
       # Uses Unix Pipe semantics
       test_pipe.cpp
+
+      # for now, only for ovpn3 servers (i.e., pgserv)
+      test_proto.cpp
       )
 
-#    target_sources(protoUnitTests PRIVATE
-#      # for now, only for ovpn3 servers (i.e., pgserv)
-#      test_proto.cpp
-#      )
+    target_sources(protoUnitTests PRIVATE
+      # for now, only for ovpn3 servers (i.e., pgserv)
+      test_proto.cpp
+      )
 endif ()
 
 if (WIN32)
