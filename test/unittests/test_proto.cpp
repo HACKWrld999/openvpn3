@@ -691,13 +691,14 @@ class NoisyWire
               const unsigned int drop_prob_arg,
               const unsigned int corrupt_prob_arg)
         : title(title_arg),
+#ifdef VERBOSE
           now(now_arg),
+#endif
           random(rand_arg),
           reorder_prob(reorder_prob_arg),
           drop_prob(drop_prob_arg),
           corrupt_prob(corrupt_prob_arg)
     {
-        now->raw();
     }
 
     template <typename T1, typename T2>
@@ -854,7 +855,9 @@ class NoisyWire
     }
 
     std::string title;
+#ifdef VERBOSE
     TimePtr now;
+#endif
     RandomAPI &random;
     unsigned int reorder_prob;
     unsigned int drop_prob;
