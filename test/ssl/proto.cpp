@@ -32,10 +32,6 @@
 
 #include <openvpn/common/platform.hpp>
 
-#ifdef OPENVPN_PLATFORM_WIN
-#include "protowin.h"
-#endif
-
 #define OPENVPN_DEBUG
 #define OPENVPN_ENABLE_ASSERT
 
