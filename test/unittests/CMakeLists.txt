@@ -60,6 +60,12 @@ add_executable(coreUnitTests
         test_buffer.cpp
         )
 
+add_executable(protoUnitTests
+        core_tests.cpp
+        test_proto.cpp
+	)
+
+
 if (${USE_MBEDTLS})
     target_sources(coreUnitTests PRIVATE
             test_mbedtls_x509certinfo.cpp
@@ -100,9 +106,12 @@ endif ()
 
 add_core_dependencies(coreUnitTests)
 add_json_library(coreUnitTests)
+add_core_dependencies(protoUnitTests)
+# add_json_library(protoUnitTests)
 
 # xxHash
 target_compile_definitions(coreUnitTests PRIVATE -DHAVE_XXHASH)
+# target_compile_definitions(protoUnitTests PRIVATE -DHAVE_XXHASH)
 if(NOT MSVC)
   list(APPEND CMAKE_PREFIX_PATH
     ${DEP_DIR}/xxHash
@@ -111,19 +120,26 @@ if(NOT MSVC)
 endif()
 find_package(xxHash REQUIRED)
 target_link_libraries(coreUnitTests xxHash::xxhash)
+# target_link_libraries(protoUnitTests xxHash::xxhash)
 
 find_package(LZO)
 if (LZO_FOUND)
   target_compile_definitions(coreUnitTests PRIVATE -DHAVE_LZO)
   target_link_libraries(coreUnitTests lzo::lzo)
+  target_compile_definitions(protoUnitTests PRIVATE -DHAVE_LZO)
+  target_link_libraries(protoUnitTests lzo::lzo)
   message("lzo found, running lzo compression tests")
 else ()
     message("lzo not found, skipping lzo compression tests")
 endif ()
 
 target_link_libraries(coreUnitTests ${GTEST_LIB} ${EXTRA_LIBS})
+target_link_libraries(protoUnitTests ${GTEST_LIB} ${EXTRA_LIBS})
 
 target_compile_definitions(coreUnitTests PRIVATE ${CORE_TEST_DEFINES})
 target_include_directories(coreUnitTests PRIVATE ${EXTRA_INCLUDES})
+target_compile_definitions(protoUnitTests PRIVATE ${CORE_TEST_DEFINES})
+target_include_directories(protoUnitTests PRIVATE ${EXTRA_INCLUDES})
 
 add_test(NAME CoreTests COMMAND coreUnitTests)
+add_test(NAME ProtoTests COMMAND protoUnitTests)
