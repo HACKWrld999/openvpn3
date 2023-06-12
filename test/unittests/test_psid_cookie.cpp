@@ -39,13 +39,14 @@
 #define OPENVPN_DEBUG
 #define OPENVPN_ENABLE_ASSERT
 
-// EKM vs. TLS_PRF mode
+// EKM vs. TLS_PRF mode  (Exported Keying Material vs Pseudo Random Function)
 // #define USE_TLS_EKM
 
 #if !defined(USE_TLS_AUTH) && !defined(USE_TLS_CRYPT)
 // #define USE_TLS_AUTH
 // #define USE_TLS_CRYPT
 #define USE_TLS_CRYPT_V2
+// #warning "USE_TLS_CRYPT_V2 is defined"  // this gets hit
 #endif
 
 // Data limits for Blowfish and other 64-bit block-size ciphers
@@ -107,6 +108,7 @@
 // feedback
 #ifndef FEEDBACK
 #define FEEDBACK 1
+// #warning "FEEDBACK is 1"  // this gets hit
 #else
 #define FEEDBACK 0
 #endif
@@ -234,6 +236,7 @@
 
 using namespace openvpn;
 
+namespace {
 // server Crypto/SSL/Rand implementation
 #if defined(USE_MBEDTLS_SERVER)
 typedef MbedTLSCryptoAPI ServerCryptoAPI;
@@ -355,22 +358,20 @@ class DroughtMeasure
 // test the OpenVPN protocol implementation in ProtoContext
 class TestProto : public ProtoContext
 {
-    typedef ProtoContext Base;
-
-    using Base::is_server;
-    using Base::mode;
-    using Base::now;
+    using ProtoContext::is_server;
+    using ProtoContext::mode;
+    using ProtoContext::now;
 
   public:
-    using Base::flush;
+    using ProtoContext::flush;
 
-    typedef Base::PacketType PacketType;
+    typedef ProtoContext::PacketType PacketType;
 
     OPENVPN_EXCEPTION(session_invalidated);
 
-    TestProto(const Base::Config::Ptr &config,
+    TestProto(const ProtoContext::Config::Ptr &config,
               const SessionStats::Ptr &stats)
-        : Base(config, stats),
+        : ProtoContext(config, stats),
           control_drought("control", config->now),
           data_drought("data", config->now),
           frame(config->frame)
@@ -382,14 +383,14 @@ class TestProto : public ProtoContext
     void reset()
     {
         net_out.clear();
-        Base::reset();
+        ProtoContext::reset();
 
-        Base::conf().mss_parms.mssfix = MSSParms::MSSFIX_DEFAULT;
+        ProtoContext::conf().mss_parms.mssfix = MSSParms::MSSFIX_DEFAULT;
     }
 
     void initial_app_send(const char *msg)
     {
-        Base::start();
+        ProtoContext::start();
         const size_t msglen = std::strlen(msg) + 1;
         BufferAllocated app_buf((unsigned char *)msg, msglen, 0);
         copy_progress(app_buf);
@@ -399,7 +400,7 @@ class TestProto : public ProtoContext
 
     void app_send_templ_init(const char *msg)
     {
-        Base::start();
+        ProtoContext::start();
         const size_t msglen = std::strlen(msg) + 1;
         templ.reset(new BufferAllocated((unsigned char *)msg, msglen, 0));
         flush(true);
@@ -421,9 +422,9 @@ class TestProto : public ProtoContext
 
     bool do_housekeeping()
     {
-        if (now() >= Base::next_housekeeping())
+        if (now() >= ProtoContext::next_housekeeping())
         {
-            Base::housekeeping();
+            ProtoContext::housekeeping();
             return true;
         }
         else
@@ -433,13 +434,13 @@ class TestProto : public ProtoContext
     void control_send(BufferPtr &&app_bp)
     {
         app_bytes_ += app_bp->size();
-        Base::control_send(std::move(app_bp));
+        ProtoContext::control_send(std::move(app_bp));
     }
 
     void control_send(BufferAllocated &&app_buf)
     {
         app_bytes_ += app_buf.size();
-        Base::control_send(std::move(app_buf));
+        ProtoContext::control_send(std::move(app_buf));
     }
 
     BufferPtr data_encrypt_string(const char *str)
@@ -453,12 +454,12 @@ class TestProto : public ProtoContext
 
     void data_encrypt(BufferAllocated &in_out)
     {
-        Base::data_encrypt(in_out);
+        ProtoContext::data_encrypt(in_out);
     }
 
     void data_decrypt(const PacketType &type, BufferAllocated &in_out)
     {
-        Base::data_decrypt(type, in_out);
+        ProtoContext::data_decrypt(type, in_out);
         if (in_out.size())
         {
             data_bytes_ += in_out.size();
@@ -500,8 +501,8 @@ class TestProto : public ProtoContext
 
     void check_invalidated()
     {
-        if (Base::invalidated())
-            throw session_invalidated(Error::name(Base::invalidation_reason()));
+        if (ProtoContext::invalidated())
+            throw session_invalidated(Error::name(ProtoContext::invalidation_reason()));
     }
 
     bool is_state_client_wait_reset_ack() const
@@ -599,12 +600,10 @@ class TestProto : public ProtoContext
 
 class TestProtoClient : public TestProto
 {
-    typedef TestProto Base;
-
   public:
-    TestProtoClient(const Base::Config::Ptr &config,
+    TestProtoClient(const TestProto::Config::Ptr &config,
                     const SessionStats::Ptr &stats)
-        : Base(config, stats)
+        : TestProto(config, stats)
     {
     }
 
@@ -613,21 +612,19 @@ class TestProtoClient : public TestProto
     {
         const std::string username("foo");
         const std::string password("bar");
-        Base::write_auth_string(username, buf);
-        Base::write_auth_string(password, buf);
+        TestProto::write_auth_string(username, buf);
+        TestProto::write_auth_string(password, buf);
     }
 };
 
 class TestProtoServer : public TestProto
 {
-    typedef TestProto Base;
-
   public:
     OPENVPN_SIMPLE_EXCEPTION(auth_failed);
 
-    TestProtoServer(const Base::Config::Ptr &config,
+    TestProtoServer(const TestProto::Config::Ptr &config,
                     const SessionStats::Ptr &stats)
-        : Base(config, stats)
+        : TestProto(config, stats)
     {
     }
 
@@ -1187,7 +1184,9 @@ int test_retry(const int thread_num)
     return ret;
 }
 
-TEST(proto, base_1_thread)
+}; // namespace
+
+TEST(proto, psid_cookie_1)
 {
     int ret = 0;
 

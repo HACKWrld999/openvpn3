@@ -63,6 +63,7 @@ add_executable(coreUnitTests
 add_executable(protoUnitTests
         core_tests.cpp
 	test_proto.cpp
+	test_psid_cookie.cpp
 	)
 
 
@@ -99,7 +100,7 @@ if (UNIX)
       test_pipe.cpp
 
       # for now, only for ovpn3 servers (i.e., pgserv)
-      test_psid_cookie.cpp
+      test_psid_cookieB.cpp
       )
 endif ()
 

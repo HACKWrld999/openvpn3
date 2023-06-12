@@ -234,6 +234,7 @@
 
 using namespace openvpn;
 
+namespace {
 // server Crypto/SSL/Rand implementation
 #if defined(USE_MBEDTLS_SERVER)
 typedef MbedTLSCryptoAPI ServerCryptoAPI;
@@ -1186,6 +1187,8 @@ int test_retry(const int thread_num)
     std::cout << "Failed" << std::endl;
     return ret;
 }
+
+}; // namespace
 
 TEST(proto, base_1_thread)
 {
