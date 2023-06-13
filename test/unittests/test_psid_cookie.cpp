@@ -4,7 +4,7 @@
 //               packet encryption, packet authentication, and
 //               packet compression.
 //
-//    Copyright (C) 2012-2023 OpenVPN Inc.
+//    Copyright (C) 2023 OpenVPN Inc.
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU Affero General Public License Version 3
@@ -19,7 +19,7 @@
 //    along with this program in the COPYING file.
 //    If not, see <http://www.gnu.org/licenses/>.
 
-// Unit test for OpenVPN Protocol implementation (class ProtoContext)
+// Unit test for the psid cookie defense
 
 #include "test_common.h"
 
@@ -42,48 +42,16 @@
 // EKM vs. TLS_PRF mode  (Exported Keying Material vs Pseudo Random Function)
 // #define USE_TLS_EKM
 
-#if !defined(USE_TLS_AUTH) && !defined(USE_TLS_CRYPT)
-// #define USE_TLS_AUTH
-// #define USE_TLS_CRYPT
-#define USE_TLS_CRYPT_V2
-// #warning "USE_TLS_CRYPT_V2 is defined"  // this gets hit
-#endif
+// for this test, Blowfish and other 64-bit block-size ciphers are not used;
+// this test is mainlt concerned with the 3 packets exchanged at the start of a
+// client connect
 
-// Data limits for Blowfish and other 64-bit block-size ciphers
-#ifndef BF
-#define BF 0
-#endif
-#define OPENVPN_BS64_DATA_LIMIT 50000
-#if BF == 1
-#define PROTO_CIPHER "BF-CBC"
-#define TLS_VER_MIN TLSVersion::UNDEF
-#define HANDSHAKE_WINDOW 60
-#define BECOME_PRIMARY_CLIENT 5
-#define BECOME_PRIMARY_SERVER 5
-#define TLS_TIMEOUT_CLIENT 1000
-#define TLS_TIMEOUT_SERVER 1000
-#define FEEDBACK 0
-#elif BF == 2
-#define PROTO_CIPHER "BF-CBC"
-#define TLS_VER_MIN TLSVersion::UNDEF
-#define HANDSHAKE_WINDOW 10
-#define BECOME_PRIMARY_CLIENT 10
-#define BECOME_PRIMARY_SERVER 10
-#define TLS_TIMEOUT_CLIENT 2000
-#define TLS_TIMEOUT_SERVER 1000
-#define FEEDBACK 0
-#elif BF == 3
-#define PROTO_CIPHER "BF-CBC"
-#define TLS_VER_MIN TLSVersion::UNDEF
-#define HANDSHAKE_WINDOW 60
-#define BECOME_PRIMARY_CLIENT 60
-#define BECOME_PRIMARY_SERVER 10
-#define TLS_TIMEOUT_CLIENT 2000
-#define TLS_TIMEOUT_SERVER 1000
-#define FEEDBACK 0
-#elif BF != 0
-#error unknown BF value
-#endif
+//  #define HANDSHAKE_WINDOW 60
+//  #define BECOME_PRIMARY_CLIENT 5
+//  #define BECOME_PRIMARY_SERVER 5
+//  #define TLS_TIMEOUT_CLIENT 1000
+//  #define TLS_TIMEOUT_SERVER 1000
+//  #define FEEDBACK 0
 
 // TLS timeout
 #ifndef TLS_TIMEOUT_CLIENT
@@ -103,14 +71,6 @@
 // how many virtual seconds between SSL renegotiations
 #ifndef RENEG
 #define RENEG 900
-#endif
-
-// feedback
-#ifndef FEEDBACK
-#define FEEDBACK 1
-// #warning "FEEDBACK is 1"  // this gets hit
-#else
-#define FEEDBACK 0
 #endif
 
 // number of threads to use for test
@@ -155,13 +115,8 @@
 
 // setup cipher
 #ifndef PROTO_CIPHER
-#ifdef PROTOv2
 #define PROTO_CIPHER "AES-256-GCM"
 #define TLS_VER_MIN TLSVersion::Type::V1_2
-#else
-#define PROTO_CIPHER "AES-128-CBC"
-#define TLS_VER_MIN TLSVersion::Type::UNDEF
-#endif
 #endif
 
 // setup digest
@@ -170,14 +125,10 @@
 #endif
 
 // setup compressor
-#ifdef PROTOv2
 #ifdef HAVE_LZ4
 #define COMP_METH CompressContext::LZ4v2
 #else
 #define COMP_METH CompressContext::COMP_STUBv2
-#endif
-#else
-#define COMP_METH CompressContext::LZO_STUB
 #endif
 
 #include <openvpn/common/exception.hpp>
@@ -187,7 +138,6 @@
 #include <openvpn/random/mtrandapi.hpp>
 #include <openvpn/frame/frame.hpp>
 #include <openvpn/ssl/proto.hpp>
-#include <openvpn/init/initprocess.hpp>
 
 #include <openvpn/crypto/cryptodcsel.hpp>
 
@@ -398,28 +348,6 @@ class TestProto : public ProtoContext
         flush(true);
     }
 
-    void app_send_templ_init(const char *msg)
-    {
-        ProtoContext::start();
-        const size_t msglen = std::strlen(msg) + 1;
-        templ.reset(new BufferAllocated((unsigned char *)msg, msglen, 0));
-        flush(true);
-    }
-
-    void app_send_templ()
-    {
-#if !FEEDBACK
-        if (bool(iteration++ & 1) == is_server())
-        {
-            modmsg(templ);
-            BufferAllocated app_buf(*templ);
-            control_send(std::move(app_buf));
-            flush(true);
-            ++n_control_send_;
-        }
-#endif
-    }
-
     bool do_housekeeping()
     {
         if (now() >= ProtoContext::next_housekeeping())
@@ -543,10 +471,10 @@ class TestProto : public ProtoContext
             std::cout << now().raw() << " " << mode().str() << " " << show << std::endl;
         }
 #endif
-#if FEEDBACK
+
         modmsg(work);
         control_send(std::move(work));
-#endif
+
         control_drought.event();
         ++n_control_recv_;
     }
@@ -591,9 +519,6 @@ class TestProto : public ProtoContext
     size_t n_control_send_ = 0;
     size_t n_control_recv_ = 0;
     BufferPtr templ;
-#if !FEEDBACK
-    size_t iteration = 0;
-#endif
     char progress_[11];
     bool disable_xmit_ = false;
 };
@@ -679,9 +604,6 @@ class NoisyWire
             std::cout << now->raw() << " " << title << " Housekeeping" << std::endl;
 #endif
         }
-
-        // queue a control channel packet
-        a.app_send_templ();
 
         // queue a data channel packet
         if (a.data_channel_ready())
@@ -931,39 +853,23 @@ int test(const int thread_num)
         cp->prng = prng_cli;
         cp->protocol = Protocol(Protocol::UDPv4);
         cp->layer = Layer(Layer::OSI_LAYER_3);
-#ifdef PROTOv2
+
         cp->enable_op32 = true;
         cp->remote_peer_id = 100;
-#endif
+
         cp->comp_ctx = CompressContext(COMP_METH, false);
         cp->dc.set_cipher(CryptoAlgs::lookup(PROTO_CIPHER));
         cp->dc.set_digest(CryptoAlgs::lookup(PROTO_DIGEST));
 #ifdef USE_TLS_EKM
         cp->dc.set_key_derivation(CryptoAlgs::KeyDerivation::TLS_EKM);
 #endif
-#ifdef USE_TLS_AUTH
+        // psid cookie currently only supports USE_TLS_AUTH, not USE_TLS_CRYPT, USE_TLS_CRYPT_V2
         cp->tls_auth_factory.reset(new CryptoOvpnHMACFactory<ClientCryptoAPI>());
         cp->tls_key.parse(tls_auth_key);
         cp->set_tls_auth_digest(CryptoAlgs::lookup(PROTO_DIGEST));
         cp->key_direction = 0;
-#endif
-#ifdef USE_TLS_CRYPT
-        cp->tls_crypt_factory.reset(new CryptoTLSCryptFactory<ClientCryptoAPI>());
-        cp->tls_key.parse(tls_auth_key);
-        cp->set_tls_crypt_algs();
-        cp->tls_crypt_ = ClientProtoContext::Config::TLSCrypt::V1;
-#endif
-#ifdef USE_TLS_CRYPT_V2
-        cp->tls_crypt_factory.reset(new CryptoTLSCryptFactory<ClientCryptoAPI>());
-        cp->set_tls_crypt_algs();
-        {
-            TLSCryptV2ClientKey tls_crypt_v2_key(cp->tls_crypt_context);
-            tls_crypt_v2_key.parse(tls_crypt_v2_client_key);
-            tls_crypt_v2_key.extract_key(cp->tls_key);
-            tls_crypt_v2_key.extract_wkc(cp->wkc);
-        }
-        cp->tls_crypt_ = ClientProtoContext::Config::TLSCrypt::V2;
-#endif
+        // end: USE_TLS_AUTH
+
         cp->pid_mode = PacketIDReceive::UDP_MODE;
 #if defined(HANDSHAKE_WINDOW)
         cp->handshake_window = Time::Duration::seconds(HANDSHAKE_WINDOW);
@@ -1020,39 +926,23 @@ int test(const int thread_num)
         sp->prng = prng_serv;
         sp->protocol = Protocol(Protocol::UDPv4);
         sp->layer = Layer(Layer::OSI_LAYER_3);
-#ifdef PROTOv2
+
         sp->enable_op32 = true;
         sp->remote_peer_id = 101;
-#endif
+
         sp->comp_ctx = CompressContext(COMP_METH, false);
         sp->dc.set_cipher(CryptoAlgs::lookup(PROTO_CIPHER));
         sp->dc.set_digest(CryptoAlgs::lookup(PROTO_DIGEST));
 #ifdef USE_TLS_EKM
         sp->dc.set_key_derivation(CryptoAlgs::KeyDerivation::TLS_EKM);
 #endif
-#ifdef USE_TLS_AUTH
+        // psid cookie currently only supports USE_TLS_AUTH, not USE_TLS_CRYPT, USE_TLS_CRYPT_V2
         sp->tls_auth_factory.reset(new CryptoOvpnHMACFactory<ServerCryptoAPI>());
         sp->tls_key.parse(tls_auth_key);
         sp->set_tls_auth_digest(CryptoAlgs::lookup(PROTO_DIGEST));
         sp->key_direction = 1;
-#endif
-#if defined(USE_TLS_CRYPT)
-        sp->tls_crypt_factory.reset(new CryptoTLSCryptFactory<ClientCryptoAPI>());
-        sp->tls_key.parse(tls_auth_key);
-        sp->set_tls_crypt_algs();
-        cp->tls_crypt_ = ClientProtoContext::Config::TLSCrypt::V1;
-#endif
-#ifdef USE_TLS_CRYPT_V2
-        sp->tls_crypt_factory.reset(new CryptoTLSCryptFactory<ClientCryptoAPI>());
-        {
-            TLSCryptV2ServerKey tls_crypt_v2_key;
-            tls_crypt_v2_key.parse(tls_crypt_v2_server_key);
-            tls_crypt_v2_key.extract_key(sp->tls_key);
-        }
-        sp->set_tls_crypt_algs();
-        sp->tls_crypt_metadata_factory.reset(new CryptoTLSCryptMetadataFactory());
-        sp->tls_crypt_ = ClientProtoContext::Config::TLSCrypt::V2;
-#endif
+        // end: USE_TLS_AUTH
+
         sp->pid_mode = PacketIDReceive::UDP_MODE;
 #if defined(HANDSHAKE_WINDOW)
         sp->handshake_window = Time::Duration::seconds(HANDSHAKE_WINDOW);
@@ -1106,14 +996,9 @@ int test(const int thread_num)
             int j = -1;
             try
             {
-#if FEEDBACK
                 // start feedback loop
                 cli_proto.initial_app_send(message);
                 serv_proto.start();
-#else
-                cli_proto.app_send_templ_init(message);
-                serv_proto.app_send_templ_init(message);
-#endif
 
                 // message loop
                 for (j = 0; j < ITER; ++j)
@@ -1141,9 +1026,6 @@ int test(const int thread_num)
                   << " net_bytes=" << nb
                   << " data_bytes=" << db
                   << " prog=" << cli_proto.progress() << '/' << serv_proto.progress()
-#if !FEEDBACK
-                  << " CTRL=" << cli_proto.n_control_recv() << '/' << cli_proto.n_control_send() << '/' << serv_proto.n_control_recv() << '/' << serv_proto.n_control_send()
-#endif
                   << " D=" << cli_proto.control_drought().raw() << '/' << cli_proto.data_drought().raw() << '/' << serv_proto.control_drought().raw() << '/' << serv_proto.data_drought().raw()
                   << " N=" << cli_proto.negotiations() << '/' << serv_proto.negotiations()
                   << " SH=" << cli_proto.slowest_handshake().raw() << '/' << serv_proto.slowest_handshake().raw()
